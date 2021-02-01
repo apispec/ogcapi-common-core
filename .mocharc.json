@@ -1,0 +1,15 @@
+{
+    "ui": "@apispec/core/bdd-options",
+    "recursive": true,
+    "inline-diff": true,
+    "reporter": "mochawesome",
+    "reporterOptions": [
+        "reportDir=report",
+        "reportFilename=index",
+        "inline=false",
+        "code=true",
+        "charts=true",
+        "saveJson=false",
+        "htmlModule=@apispec/report"
+    ]
+}
