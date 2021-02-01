@@ -1,4 +1,15 @@
 {
   "name": "ogcapi-common-core",
-  "version": "0.1.0"
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "mocha",
+    "postinstall": "echo 'patch-package --patch-dir ./node_modules/@apispec/core/patches'"
+  },
+  "dependencies": {
+    "@apispec/core": "^1.0.0"
+  },
+  "workspaces": [
+    "../apispec/packages/*"
+  ]
 }
