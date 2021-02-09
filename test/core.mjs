@@ -1,6 +1,6 @@
-const { init } = require("@apispec/core");
-const expect = require("chai").expect;
-const jsonPt = require("./jsonPt");
+import { init } from "@apispec/core";
+import content_generic from "../plugins/content_generic.mjs";
+import content_apidef from "../plugins/content_apidef.mjs";
 
 const { server, json, opts, save, load } = init();
 console.log("CFG", opts);
@@ -22,12 +22,33 @@ const setup = async () =>
     })
     //ignore errors in setup, requests will be repeated in test
     //TODO: make configurable
-    .catch(() => [])
-    .finally(run);
+    .catch(() => save("mediaTypes", []));
 
-const mediaTypes = await setup();
+const setup2 = async () =>
+  server
+    .get("/")
+    .set("Accept", "application/json")
+    .then((res) => {
+      const apiDefMediaTypes =
+        res.body && res.body.links
+          ? res.body.links
+              .filter((link) => link.rel === "service-desc")
+              .map((link) => link.type)
+          : [];
 
-console.log("SETUP MEDIA TYPES", mediaTypes);
+      console.log("APIDEF MEDIA TYPES", apiDefMediaTypes);
+      save("mediaTypes", apiDefMediaTypes, "apiDefinition");
+    })
+    //ignore errors in setup, requests will be repeated in test
+    //TODO: make configurable
+    .catch(() => save("mediaTypes", [], "apiDefinition"));
+
+//TODO: skip for initial editor loading
+await Promise.allSettled([setup(), setup2()]);
+
+console.log("SETUP MEDIA TYPES", load("mediaTypes"));
+
+console.log("SETUP MEDIA TYPES 2", load("mediaTypes", "apiDefinition"));
 
 describe(
   {
@@ -162,9 +183,7 @@ DONE
         describe(
           { title: "can be retrieved 2 [/conf/core/root-op]" },
           function () {
-            const formats = jsonPt.formats;
-
-            formats.forEach(function (format) {
+            Object.values(content_generic).forEach(function (format) {
               it(format.name, function (done) {
                 server
                   .context(this)
@@ -203,34 +222,26 @@ DONE
             noFile: true,
           },
           function () {
-            let mediaTypes = [];
+            let mediaTypes = load("mediaTypes");
 
             const schema =
               "https://raw.githubusercontent.com/opengeospatial/ogcapi-common/master/core/openapi/schemas/landingPage.json";
 
-            before("create media type tests", function () {
-              mediaTypes = load("mediaTypes");
-              console.log("MTT THIS", this.currentTest.parent.addTest);
-              describe("BLA", function () {
-                mediaTypes.forEach(function (mediaType) {
-                  it(
-                    mediaType,
-                    function (done) {
-                      const format = jsonPt.formats.find(
-                        (format) => format.mediaType === mediaType
-                      );
-                      const content = load(mediaType, "landingPage");
+            // plugin category/tags: CONTENT_GENERIC, CONTENT_APIDEF
+            mediaTypes.forEach(function (mediaType) {
+              const format = content_generic[mediaType];
+              it(
+                format ? `${format.name} [${format.id}]` : mediaType,
+                function (done) {
+                  const content = load(mediaType, "landingPage");
 
-                      if (!format || !content) {
-                        this.skip();
-                      }
+                  if (!format || !content) {
+                    this.skip();
+                  }
 
-                      format.validate({ json }, content, schema, done);
-                    },
-                    this.currentTest.parent
-                  );
-                }, this);
-              });
+                  format.validate({ json }, content, schema, done);
+                }
+              );
             });
 
             it(
@@ -293,44 +304,50 @@ DONE
           console.log("OAS", definitions);
 
           //TODO: test all defs
-          const oas = definitions.find((def) => def.rel === "service-desc");
+          const oas = definitions.filter((def) => def.rel === "service-desc");
 
           //TODO: extract mediaTypes
+          const apiDefMediaTypes = oas.map((def) => def.type);
+          //save("mediaTypes", apiDefMediaTypes, "apiDefinition");
 
           server
             .context(this)
             .get(/*oas.href*/ "/api")
             .query({ f: "json" })
-            .set("Accept", "application/json")
+            .set("Accept", apiDefMediaTypes[0])
             .expect(200)
             .expect("Content-Type", /json/)
-            .expect((res) => save("oas30", res.body))
+            .expect((res) => save("oas30", res.body, "apiDefinition"))
             .end(done);
         });
 
-        it(
+        describe(
           {
             title:
               "complies with the required structure and contents [/conf/core/api-definition-success]",
             description: "BLA",
           },
-          function (done) {
+          function () {
             const oas30 = load("oas30");
+            let mediaTypes = load("mediaTypes", "apiDefinition");
 
-            //TODO: run for each mediaType like in landingPage
+            const schema = "schemas/openapi.json";
+
+            mediaTypes.forEach(function (mediaType) {
+              it(mediaType, function (done) {
+                const format = content_apidef[mediaType];
+                const content = load(mediaType, "apiDefinition");
+
+                if (!format || !content) {
+                  this.skip();
+                }
+
+                format.validate({ json }, content, schema, done);
+              });
+            });
 
             //TODO: oas30.js exports test for /conf/oas30/oas-definition-1 and /conf/oas30/oas-definition-2
             // content? plugin for api definitions
-
-            json
-              .of(oas30)
-              .compliesToSchema(
-                "openapi.json",
-                "schemas"
-                //'https://raw.githubusercontent.com/OAI/OpenAPI-Specification/master/schemas/v3.0/',
-                //true
-              )
-              .end(done);
           }
         );
       }
@@ -372,9 +389,7 @@ DONE
             const conformance = load("conformance");
 
             //TODO: run for each mediaType like in landingPage
-            const formats = jsonPt.formats;
-
-            formats.forEach(function (format) {
+            content_generic.forEach(function (format) {
               format.validate(
                 { json },
                 conformance,
@@ -416,49 +431,6 @@ DONE
             done();
           }
         );
-      }
-    );
-  }
-);
-
-describe(
-  {
-    title: "Conformance Class OpenAPI 3.0",
-    description: "http://www.opengis.net/spec/ogcapi-common/1.0/conf/oas3",
-    noFile: true,
-  },
-  function () {
-    xit(
-      {
-        title: "[/conf/oas30/oas-definition-1]",
-        description: `TODO: check saved definitions from API Path
-                Verify that an OpenAPI definition in JSON is available using the media type application/vnd.oai.openapi+json;version=3.0 and link relation service-desc
-
-Verify that an HTML version of the API definition is available using the media type text/html and link relation service-doc.`,
-      },
-      function (done) {}
-    );
-
-    xit(
-      {
-        title: "[/conf/oas30/oas-definition-2]",
-        description: `TODO: already checked in API Path?
-                Verify that the JSON representation conforms to the OpenAPI Specification, version 3.0.`,
-      },
-      function (done) {}
-    );
-
-    it(
-      {
-        title: "[/conf/oas30/oas-impl]",
-        description: `TODO: test generator
-                TODO: execute here or as part of the * Path tests?
-                Construct an operation for each OpenAPI Path object including all server URL options, HTTP operations and enumerated path parameters.
-
-Validate that each operation performs in accordance with the API definition.`,
-      },
-      function (done) {
-        console.log("TEST SAVE ORDER", load("JSON", "format"));
       }
     );
   }
