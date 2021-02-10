@@ -2,6 +2,7 @@
   "name": "ogcapi-common-core",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "test": "mocha",
     "postinstall": "echo 'patch-package --patch-dir ./node_modules/@apispec/core/patches'"

@@ -1,6 +1,6 @@
 // const http = require('@apispec/http');
 
-module.exports = {
+export default {
     title: 'OGC API - Common - Part 1: Core',
     description: '[See](http://docs.opengeospatial.org/DRAFTS/19-072.html)',
     plugins: ['@apispec/http', '@apispec/json'],

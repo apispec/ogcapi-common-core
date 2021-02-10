@@ -1,5 +1,5 @@
 {
-    "ui": "@apispec/core/bdd-options",
+    "ui": "@apispec/core/bdd-options.cjs",
     "spec": "spec",
     "recursive": true,
     "inline-diff": true,

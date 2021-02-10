@@ -2,7 +2,7 @@ import { init } from "@apispec/core";
 import content_generic from "../plugins/content_generic.mjs";
 import content_apidef from "../plugins/content_apidef.mjs";
 
-const { server, json, opts, save, load } = init();
+const { server, json, opts, save, load } = await init();
 console.log("CFG", opts);
 
 const setup = async () =>
