@@ -1,5 +1,6 @@
 {
     "ui": "@apispec/core/bdd-options",
+    "spec": "spec",
     "recursive": true,
     "inline-diff": true,
     "reporter": "mochawesome",
