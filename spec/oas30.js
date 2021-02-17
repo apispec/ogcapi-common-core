@@ -1,6 +1,6 @@
 import { init } from "@apispec/core";
 
-const { server, json, opts, save, load } = init();
+const { server, json, opts, save, load } = await init();
 
 describe(
   {

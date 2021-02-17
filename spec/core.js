@@ -1,6 +1,6 @@
 import { init } from "@apispec/core";
-import content_generic from "../plugins/content_generic.mjs";
-import content_apidef from "../plugins/content_apidef.mjs";
+import content_generic from "../plugins/content_generic.js";
+import content_apidef from "../plugins/content_apidef.js";
 
 const { server, json, opts, save, load } = await init();
 console.log("CFG", opts);
@@ -127,92 +127,38 @@ DONE
         noFile: true,
       },
       function () {
-        before("get media types", function (done) {
-          server
-            .context(this)
-            .get("/")
-            .set("Accept", "application/json")
-            .expect((res) => {
-              const mediaTypes =
-                res.body && res.body.links
-                  ? res.body.links
-                      .filter(
-                        (link) =>
-                          link.rel === "self" || link.rel === "alternate"
-                      )
-                      .map((link) => link.type)
-                  : [];
-
-              console.log("BEFORE MEDIA TYPES", mediaTypes);
-              save("mediaTypes", mediaTypes);
-            })
-            .then(() => done())
-            //ignore errors in hooks, requests will be repeated in test
-            //TODO: make configurable
-            .catch(() => done());
-        });
-
-        it("can be retrieved [/conf/core/root-op]", function (done) {
-          server
-            .context(this)
-            .get("/")
-            .set("Accept", "application/json")
-            .expect(200)
-            .expect("Content-Type", /json/)
-            .expect((res) => save("landingPage", res.body))
-            .expect((res) => {
-              //TODO: this will override request and response in context
-              // the design is prepared for only one request per test
-              const mediaTypes = load("mediaTypes");
-
-              return Promise.all(
-                mediaTypes.map(function (mediaType) {
-                  return server
-                    .context(this) //TODO: does not work
-                    .get("/")
-                    .set("Accept", mediaType)
-                    .expect(200)
-                    .expect((res) => save(mediaType, res.body, "landingPage"));
-                }, this)
-              );
-            })
-            .end(done);
-        });
-
-        //TODO: is listed after "complies with schema" in the report because it is a suite, adjust
+        //TODO: composite tests are listed after all tests because they are suites, adjust in report
         describe(
-          { title: "can be retrieved 2 [/conf/core/root-op]" },
+          { title: "can be retrieved [/conf/core/root-op]" },
           function () {
-            Object.values(content_generic).forEach(function (format) {
-              it(format.name, function (done) {
-                server
-                  .context(this)
-                  .get("/")
-                  .set("Accept", format.mediaType)
-                  .expect(200)
-                  .expect("Content-Type", /json/)
-                  .expect((res) => save(format.id, res.body, "landingPage"))
-                  .end(done);
-              });
+            let mediaTypes = load("mediaTypes");
+
+            mediaTypes.forEach(function (mediaType) {
+              const format = content_generic[mediaType];
+
+              it(
+                format ? `${format.name} [${format.id}]` : mediaType, //TODO: wrong id
+                function (done) {
+                  if (!format) {
+                    this.skip();
+                  }
+
+                  server
+                    .context(this)
+                    .get("/")
+                    .set("Accept", format.mediaType)
+                    .expect(200)
+                    .expect("Content-Type", format.responseTypePattern)
+                    .expect((res) => {
+                      if (format.default) save("landingPage", res.body);
+                      save(format.mediaType, res.body, "landingPage");
+                    })
+                    .end(done);
+                }
+              );
             });
           }
         );
-
-        //TODO: remove, only serves as example for matches
-        it("complies with schema [/conf/core/root-success]", function (done) {
-          console.log(
-            Object.keys(json).filter(function (fname) {
-              return /^(is|has)[A-Z]/.test(fname);
-            })
-          );
-          const { isArray, isString } = json;
-
-          json.of(load("landingPage")).matches({
-            title: isString,
-            links: isString,
-          });
-          done(); //TODO: json.end
-        });
 
         describe(
           {
@@ -227,7 +173,6 @@ DONE
             const schema =
               "https://raw.githubusercontent.com/opengeospatial/ogcapi-common/master/core/openapi/schemas/landingPage.json";
 
-            // plugin category/tags: CONTENT_GENERIC, CONTENT_APIDEF
             mediaTypes.forEach(function (mediaType) {
               const format = content_generic[mediaType];
               it(
@@ -239,50 +184,10 @@ DONE
                     this.skip();
                   }
 
-                  format.validate({ json }, content, schema, done);
+                  format.validate(content, schema, done);
                 }
               );
             });
-
-            it(
-              {
-                title: "JSON [/conf/json/content]",
-                description: "BLA",
-              },
-              function (done) {
-                if (!mediaTypes.includes("application/json")) {
-                  this.skip();
-                  return;
-                }
-
-                const landingPage = load("landingPage");
-
-                json
-                  .of(landingPage)
-                  .compliesToSchema(
-                    "landingPage.json",
-                    //'cache/schemas'
-                    "https://raw.githubusercontent.com/opengeospatial/ogcapi-common/master/core/openapi/schemas/"
-                    //true
-                  )
-                  .end(done);
-              }
-            );
-
-            it(
-              {
-                title: "HTML [/conf/html/content]",
-                description: "BLA",
-              },
-              function (done) {
-                if (!mediaTypes.includes("text/html2")) {
-                  this.skip();
-                  return;
-                }
-
-                done();
-              }
-            );
           }
         );
       }
@@ -294,31 +199,20 @@ DONE
       },
       function () {
         it("can be retrieved [/conf/core/api-definition-op]", function (done) {
-          const landingPage = load("landingPage");
+          const apiDefMediaTypes = load("mediaTypes", "apiDefinition");
 
-          //TODO: why not test /api directly
-          const definitions = landingPage.links.filter(
-            (link) => link.rel === "service-desc" || link.rel === "service-doc"
-          );
-
-          console.log("OAS", definitions);
-
-          //TODO: test all defs
-          const oas = definitions.filter((def) => def.rel === "service-desc");
-
-          //TODO: extract mediaTypes
-          const apiDefMediaTypes = oas.map((def) => def.type);
-          //save("mediaTypes", apiDefMediaTypes, "apiDefinition");
-
-          server
-            .context(this)
-            .get(/*oas.href*/ "/api")
-            .query({ f: "json" })
-            .set("Accept", apiDefMediaTypes[0])
-            .expect(200)
-            .expect("Content-Type", /json/)
-            .expect((res) => save("oas30", res.body, "apiDefinition"))
-            .end(done);
+          Promise.all(
+            apiDefMediaTypes.map(function (mediaType) {
+              return server
+                .context(this) //TODO: does not work
+                .get("/api")
+                .set("Accept", mediaType)
+                .expect(200)
+                .expect((res) => save(mediaType, res.body, "apiDefinition"));
+            }, this)
+          )
+            .then(() => done())
+            .catch(done);
         });
 
         describe(
@@ -329,21 +223,24 @@ DONE
           },
           function () {
             const oas30 = load("oas30");
-            let mediaTypes = load("mediaTypes", "apiDefinition");
+            let apiDefMediaTypes = load("mediaTypes", "apiDefinition");
 
             const schema = "schemas/openapi.json";
 
-            mediaTypes.forEach(function (mediaType) {
-              it(mediaType, function (done) {
-                const format = content_apidef[mediaType];
-                const content = load(mediaType, "apiDefinition");
+            apiDefMediaTypes.forEach(function (mediaType) {
+              const format = content_apidef[mediaType];
+              it(
+                format ? `${format.name} [${format.id}]` : mediaType,
+                function (done) {
+                  const content = load(mediaType, "apiDefinition");
 
-                if (!format || !content) {
-                  this.skip();
+                  if (!format || !content) {
+                    this.skip();
+                  }
+
+                  format.validate(content, done);
                 }
-
-                format.validate({ json }, content, schema, done);
-              });
+              );
             });
 
             //TODO: oas30.js exports test for /conf/oas30/oas-definition-1 and /conf/oas30/oas-definition-2
@@ -388,25 +285,13 @@ DONE
           function (done) {
             const conformance = load("conformance");
 
-            //TODO: run for each mediaType like in landingPage
-            content_generic.forEach(function (format) {
+            Object.values(content_generic).forEach(function (format) {
               format.validate(
-                { json },
                 conformance,
                 "https://raw.githubusercontent.com/opengeospatial/ogcapi-common/master/core/openapi/schemas/confClasses.json",
                 done
               );
             });
-
-            json
-              .of(conformance)
-              .compliesToSchema(
-                "confClasses.json",
-                //'cache/schemas'
-                "https://raw.githubusercontent.com/opengeospatial/ogcapi-common/master/core/openapi/schemas/",
-                true
-              )
-              .end(done);
           }
         );
 
